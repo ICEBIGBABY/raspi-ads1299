@@ -6,11 +6,19 @@ import threading
 import scipy.io as sio
 import datetime
 
+import socket
+import json
+
 PIN_DRDY = 6
 PIN_RST = 13
 PIN_CLKSEL = 19
 PIN_START = 26
 PIN_CS = 8
+
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect( ('127.0.0.1', 8080) )
+
+print('connected!')
 
 class Datapool:
     def __init__(self, name):
@@ -19,8 +27,11 @@ class Datapool:
         self.dec_data = []
         self.time_stamp = []
         self.status = []
-        self.issaved = True
-        self.isempty = True
+    def clear(self):
+        self.hex_data = []
+        self.dec_data = []
+        self.time_stamp = []
+        self.status = []
 
 
 datapool1 = Datapool('pool1')
@@ -130,6 +141,9 @@ def receiveData(datapool, datalength):
         temp = spi.readbytes(27)
         datapool.status.append( (temp[0]<<16) + (temp[1]<<8) + temp[2] )
         dataConvert(datapool, temp[3:27] )
+    client.send( (json.dumps(datapool.__dict__)).encode('utf-8') )
+    datapool.clear()
+
 
 def dataConvert(datapool,hex_data):
     temp = []
@@ -217,6 +231,7 @@ def thread2():
         #else:
             #print('wait for receiving data!')
 
+
 if __name__ == '__main__':
     #spi = spidev.SpiDev()
     setup()
@@ -224,12 +239,12 @@ if __name__ == '__main__':
     #writeReg(0x05, 0x60)
     readAllReg()
     startConv()
-
-    receiveData(datapool1, 2400000)
-    print(len(datapool1.status))
-    print(len(datapool1.dec_data))
-    print(len(datapool1.time_stamp))
-    print(len(datapool1.hex_data))
+    for k in range(0,25*60):
+        receiveData(datapool1, 160)
+    # print(len(datapool1.status))
+    # print(len(datapool1.dec_data))
+    # print(len(datapool1.time_stamp))
+    # print(len(datapool1.hex_data))
     stopConv()
     GPIO.cleanup()
-
+    client.close()
