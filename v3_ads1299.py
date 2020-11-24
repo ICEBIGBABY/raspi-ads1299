@@ -17,6 +17,7 @@ PIN_CS = 8
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect( ('127.0.0.1', 8080) )
+#client.connect( ('10.28.199.86', 8080) )
 
 print('connected!')
 
@@ -35,9 +36,6 @@ class Datapool:
 
 
 datapool1 = Datapool('pool1')
-datapool2 = Datapool('pool2')
-
-
 spi = spidev.SpiDev()
 
 def setup():
@@ -163,88 +161,17 @@ def hex2dec(input_data):
     #output_data = float(output_data * 4.5 / 0x7FFFFF /24)
     return output_data
 
-def saveData(datapool):
-    sio.savemat(str(datetime.datetime.now())+'.mat', mdict={'status':datapool.status, 'data': datapool.dec_data, 'time_stamp': datapool.time_stamp})
-
-
-def thread1():
-    counter = 0
-    data_pkg_number = 25
-    #for k in range(0,25):
-    while 1:
-        if datapool1.isempty==True & datapool1.issaved==True:
-            receiveData(datapool1)
-            print(len(datapool1.hex_data))
-            print(len(datapool2.hex_data))
-            datapool1.isempty = False
-            datapool1.issaved = False
-            counter+=1
-            print('1 received')
-        elif datapool2.isempty==True & datapool2.issaved==True:
-            receiveData(datapool2)
-            print(len(datapool1.hex_data))
-            print(len(datapool2.hex_data))
-            datapool2.isempty = False
-            datapool2.issaved = False
-            counter+=1
-            print('2 received')
-        else:
-            print('wait for saving data!')
-        
-        print(len(datapool1.hex_data))
-        print(len(datapool2.hex_data))
-        if counter==data_pkg_number:
-            break
-
-         
-def thread2():
-    #for k in range(0,5):
-    counter = 0
-    data_pkg_number = 25
-    while 1:
-        if datapool1.isempty==False & datapool1.issaved==False:
-            #dataConvert(datapool1)
-            #saveData(datapool1)
-            datapool1.hex_data = []
-            datapool1.dec_data = []
-            datapool1.status = []
-            datapool1.time_stamp = []
-
-            datapool1.isempty = True
-            datapool1.issaved = True
-            counter+=1
-            print('1 saved')
-        elif datapool2.isempty==False & datapool2.issaved==False:
-            #dataConvert(datapool2)
-            #saveData(datapool2)
-            datapool2.hex_data = []
-            datapool2.dec_data = []
-            datapool2.status = []
-            datapool2.time_stamp = []
-            datapool2.isempty = True
-            datapool2.issaved = True
-            print('2 saved')
-            counter+=1
-
-        if counter==data_pkg_number:
-            break
-        #else:
-            #print('wait for receiving data!')
-
 
 if __name__ == '__main__':
-    #spi = spidev.SpiDev()
     setup()
     initialize()
-    #writeReg(0x05, 0x60)
     readAllReg()
+
+    time_s = 10
     startConv()
-    for k in range(0,25*60):
+    for k in range(0,25*time_s):
         receiveData(datapool1, 160)
-    # print(len(datapool1.status))
-    # print(len(datapool1.dec_data))
-    # print(len(datapool1.time_stamp))
-    # print(len(datapool1.hex_data))
     stopConv()
+
     GPIO.cleanup()
     client.close()

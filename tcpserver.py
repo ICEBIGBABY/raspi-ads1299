@@ -14,7 +14,8 @@ while 1:
 # for k in range(0,200):
     data = conn.recv(20000)
     print(data)
-
+    if data==b'':
+        break
     # print(json.loads(data))
 
 conn.close()
