@@ -7,6 +7,7 @@ import socket
 import json
 
 import multiprocessing
+import numpy as np
 
 PIN_DRDY = 6
 PIN_RST = 13
@@ -32,7 +33,7 @@ spi = spidev.SpiDev()
 def setup():
     # spi = spidev.SpiDev()
     spi.open(0,0)
-    spi.max_speed_hz = 7800000 # 15600000   
+    # spi.max_speed_hz = 7800000 # 15600000   
     #spi.max_speed_hz = 3900000    
     #spi.max_speed_hz = 1953000
     spi.mode = 0b01
@@ -74,7 +75,9 @@ def setup():
     delayMicroseconds(12)
 
 def initialize():
-    writeReg(0x01, 0x92)
+    #writeReg(0x01, 0x92)
+    writeReg(0x01, 0x96)
+    
     writeReg(0x02, 0xC0)
     writeReg(0x03, 0xE0)
     writeReg(0x04, 0x00)
@@ -167,9 +170,17 @@ def process_receive(q):
         datapool = Datapool()
         datapool.pkgnum = i
         i = i+1
-        receiveData(datapool,160) # 40ms one pkg
+        startConv()
+        receiveData(datapool,20) # 40ms one pkg
         # print(datapool.dec_data)
+        stopConv()
+        # checkData(datapool)
         q.put(datapool)
+        
+        # senddata = (json.dumps(datapool.__dict__)).encode('utf-8')
+        # print(len(senddata))
+        # client.send( str(len(senddata)).encode('utf-8') )
+        # client.send( senddata )
 
 
 def process_transfer(q):
@@ -180,35 +191,49 @@ def process_transfer(q):
         if not q.empty():
             value = q.get(True)
             senddata = (json.dumps(value.__dict__)).encode('utf-8')
-            # print(len(senddata))
+            print(len(senddata))
             client.send( str(len(senddata)).encode('utf-8') )
             # print('1')
             client.send( senddata )
             # print('1')
 
             # counter = counter+1
-        # if counter == 25*time_s:
+        # if :counter == 25*time_s:
         #     break
 
-
+def checkData(datapool):
+    data = np.abs(datapool.dec_data).T
+    # print(data.shape)
+    for k in range(0,8):
+        mean = np.mean(data[k])
+        std = np.std(data[k])
+        for i in range(0,len(data[k])):
+            if(data[k][i]>mean+3*std):
+                # print(k,i)
+                # print(datapool.dec_data[i][k])
+                datapool.dec_data[i][k]=(datapool.dec_data[i-1][k]+datapool.dec_data[i+1][k])/2
+                # print(datapool.dec_data[i][k])
+        # print(mean)
+        # print(std)
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # client.connect( ('127.0.0.1', 8080) )
-client.connect( ('10.28.230.244', 8080) )
-# client.connect( ('10.28.152.158', 8080) )
+# 
+client.connect( ('10.28.215.181', 8080) )
+# client.connect( ('10.28.230.244', 8080) )
 print('connected!')
 
 if __name__ == '__main__':
     setup()
     initialize()
     readAllReg()
-    # changeToTestSignal()
+    changeToTestSignal()
 
     p = multiprocessing.Pool()
     q = multiprocessing.Manager().Queue()
 
-    startConv()
-   
+    # startConv()
+    # process_receive()
     # p1 = multiprocessing.Process(target=process_receive, args=(q,) )
     # p2 = multiprocessing.Process(target=process_transfer, args=(q,) )
 
@@ -225,7 +250,7 @@ if __name__ == '__main__':
 
     # p1.join()
     p.join()
-    stopConv()
+    # stopConv()
     GPIO.cleanup()
 
     client.close()

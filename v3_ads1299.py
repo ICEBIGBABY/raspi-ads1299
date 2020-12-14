@@ -16,8 +16,8 @@ PIN_START = 26
 PIN_CS = 8
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect( ('127.0.0.1', 8080) )
-#client.connect( ('10.28.199.86', 8080) )
+# client.connect( ('127.0.0.1', 8080) )
+client.connect( ('10.28.230.244', 8080) )
 
 print('connected!')
 

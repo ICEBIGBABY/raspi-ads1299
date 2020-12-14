@@ -242,10 +242,10 @@ def process_transfer(q):
 
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect( ('127.0.0.1', 8080) )
+# client.connect( ('127.0.0.1', 8080) )
 
 # client.connect( ('10.28.204.67', 8080) )
-# client.connect( ('10.28.230.244', 8080) )
+client.connect( ('10.28.230.244', 8080) )
 print('connected!')
 
 if __name__ == '__main__':
