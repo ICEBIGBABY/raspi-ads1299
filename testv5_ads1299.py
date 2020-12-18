@@ -70,7 +70,7 @@ def setup():
     GPIO.output(PIN_RST, GPIO.LOW)
     delayMicroseconds(14)
     GPIO.output(PIN_RST, GPIO.HIGH)
-
+ 
     delayMicroseconds(12)
     spi.writebytes([0x11])
     delayMicroseconds(8)
@@ -168,11 +168,11 @@ def receiveData(datapool, datalength):
 
 def dataConvert(datapool,hex_data):
     temp = []
-    data = []
+    # data = []
     for j in range(0,8):
-        data.append(  (hex_data[3*j]<<16) + (hex_data[3*j+1]<<8) + hex_data[3*j+2] ) 
+        # data.append(  (hex_data[3*j]<<16) + (hex_data[3*j+1]<<8) + hex_data[3*j+2] ) 
         temp.append( hex2dec( (hex_data[3*j]<<16) + (hex_data[3*j+1]<<8) + hex_data[3*j+2] ) )
-    print(data)
+    # print(data)
     datapool.dec_data.append(temp)
 
 def hex2dec(input_data):
@@ -204,7 +204,7 @@ def process_receive(q):
     # i=0
     startConv()
     # while 1:
-    for i in range(0,120):
+    for i in range(0,10000):
         datapool = Datapool()
         datapool.pkgnum = i
         # i = i+1
@@ -236,16 +236,16 @@ def process_transfer(q):
             print('sent')
 
             counter = counter+1
-        if counter == 120:
+        if counter == 10000:
             break
 
 
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# client.connect( ('127.0.0.1', 8080) )
+client.connect( ('10.128.247.175', 8080) )
 
-# client.connect( ('10.28.204.67', 8080) )
-client.connect( ('10.28.230.244', 8080) )
+# client.connect( ('127.0.0.1', 8080) )
+# client.connect( ('10.28.254.184', 8080) )
 print('connected!')
 
 if __name__ == '__main__':
