@@ -1,3 +1,5 @@
+# 这个代码可以用于多片ADS1299的测试 12.22最后一次修改
+
 import spidev
 import RPi.GPIO as GPIO
 from wiringpi import delay,delayMicroseconds
@@ -132,10 +134,17 @@ class Ads1299:
         self.spi.writebytes([0x0A, 0x11])
         GPIO.output(self.PIN_CS, GPIO.HIGH)
         
-    def receiveOneData(self):
+    def waitforDRDY(self):
         while 1:
             if GPIO.input(self.PIN_DRDY)==0:
                 break
+    
+    def receiveOneData(self):
+        # 收取一次数据，调用此函数时篇选信号需要写低
+        # 手动调用waitforDRDY
+        # while 1:
+        #     if GPIO.input(self.PIN_DRDY)==0:
+        #         break
         
         spirecv = self.spi.readbytes(27)
         status = (spirecv[0]<<16) + (spirecv[1]<<8) + spirecv[2]
@@ -164,6 +173,7 @@ class Ads1299:
         for k in range(0, datalength, pkglength):
             time_stamp = str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
             for i in range(0,pkglength):
+                self.waitforDRDY()
                 dec_data,status = self.receiveOneData()
                 all_dec_data.append(dec_data)
                 all_status.append(status)
@@ -194,6 +204,7 @@ def process_transfer(pkgnum, q):
     while 1:
         if not q.empty():
             value = q.get(True)
+            print(value.time_stamp)
             senddata = (json.dumps(value.__dict__)).encode('utf-8')
             print(len(senddata))
             client.send( str(len(senddata)).encode('utf-8') )
@@ -203,7 +214,42 @@ def process_transfer(pkgnum, q):
             if counter == pkgnum:
                 break
 
+def twochiprecrivedata(chip1, chip2, datalength, pkglength, q):
+    all_dec_data = []
+    all_status = []
 
+    chip1.startConv()
+    chip2.startConv()
+
+    
+
+    for k in range(0, datalength, pkglength):
+        time_stamp = str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+        for i in range(0,pkglength):
+            chip1.waitforDRDY()
+
+            GPIO.output(chip1.PIN_CS, GPIO.LOW)
+            dec_data_1,status_1 = chip1.receiveOneData()
+            GPIO.output(chip1.PIN_CS, GPIO.HIGH)
+
+            GPIO.output(chip2.PIN_CS, GPIO.LOW)
+            dec_data_2,status_2 = chip2.receiveOneData()
+            GPIO.output(chip2.PIN_CS, GPIO.HIGH)
+
+            all_dec_data.append( dec_data_1+dec_data_2 )
+            all_status.append( status_1+status_2 )
+        datapool = Datapool()
+        datapool.pkgnum = k
+        datapool.time_stamp = time_stamp
+        datapool.dec_data = all_dec_data
+        datapool.status = all_status
+        q.put(datapool)
+        del datapool
+        all_dec_data = []
+        all_status = []
+    
+    chip1.stopConv()
+    chip2.stopConv()
 
 
 pkgnum = 120
@@ -212,25 +258,31 @@ pkglength = 125
 chip1 = Ads1299(19, 0)
 chip1.global_setup()
 chip1.initialize()
-# chip1.changeToTestSignal()
+chip1.changeToTestSignal()
 print('chip1')
 chip1.readAllReg()
 
-# chip2 = Ads1299(16, 1)
-# chip2.initialize()
-# print('chip2')
-# chip2.readAllReg()
+chip2 = Ads1299(16, 0)
+chip2.initialize()
+chip2.changeToTestSignal()
+print('chip2')
+chip2.readAllReg()
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # client.connect( ('127.0.0.1', 8080) )
-client.connect( ('10.128.247.175', 8080) )
+# client.connect( ('10.128.247.175', 8080) )
+client.connect( ('10.28.230.244', 8080) )
 print('connected!')
 
 p = multiprocessing.Pool()
 q = multiprocessing.Manager().Queue()
 
 p.apply_async(func=process_transfer, args=(pkgnum, q,) )
-chip1.receiveData(pkglength, datalength=pkgnum*pkglength, q=q)
+# chip1.receiveData(pkglength, datalength=pkgnum*pkglength, q=q)
+
+pkgnum = 240
+pkglength = 60
+twochiprecrivedata(chip1, chip2, pkgnum*pkglength, pkglength, q)
 
 p.close()
 
