@@ -167,24 +167,24 @@ if __name__ == '__main__':
     initialize()
     readAllReg()
     # changeToTestSignal()
-    # _thread.start_new_thread(process_receive, ())
+    _thread.start_new_thread(process_receive, ())
 
-    # while 1:
-    #     for i in range(len(channel)):
-    #         if len(channel[0]) >=1000:
-    #             plt.subplot(2,1,1)
-    #             plt.plot(channel[0][-1000:])
-    #             plt.subplot(2,1,2)
-    #             plt.plot(channel[1][-1000:])
-    #             # plt.subplot(8,1,3)
-    #             # plt.plot(channel[2][-1000:])
-    #             # plt.subplot(8,1,4)
-    #             # plt.plot(channel[3][-1000:])
-    #             # plt.subplot(8,1,5)
-    #             # plt.plot(channel[4][-1000:])
+    while 1:
+        for i in range(len(channel)):
+            if len(channel[0]) >=1000:
+                plt.subplot(2,1,1)
+                plt.plot(channel[0][-1000:])
+                plt.subplot(2,1,2)
+                plt.plot(channel[1][-1000:])
+                # plt.subplot(8,1,3)
+                # plt.plot(channel[2][-1000:])
+                # plt.subplot(8,1,4)
+                # plt.plot(channel[3][-1000:])
+                # plt.subplot(8,1,5)
+                # plt.plot(channel[4][-1000:])
 
-    #             plt.pause(1)
-    #             plt.clf()
+                plt.pause(1)
+                plt.clf()
 
 
     process_receive()

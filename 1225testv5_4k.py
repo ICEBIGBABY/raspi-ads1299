@@ -79,7 +79,7 @@ def setup():
 
 def initialize():
     #writeReg(0x01, 0x92)
-    writeReg(0x01, 0x96)
+    writeReg(0x01, sample_rate)
     
     writeReg(0x02, 0xC0)
     writeReg(0x03, 0xE0)
@@ -133,10 +133,10 @@ def changeToTestSignal():
     writeReg(0x0C, 0x65)
 
 def startConv():
-    spi.writebytes([0x08, 0x10])
+    spi.writebytes([0x08])
 
 def stopConv():
-    spi.writebytes([0x0A, 0x11])
+    spi.writebytes([0x0A])
 
 def receiveData(datapool, datalength):
     datapool.time_stamp.append(str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')))
@@ -146,7 +146,7 @@ def receiveData(datapool, datalength):
         while 1:
             if GPIO.input(PIN_DRDY)==0:
                 break
-        
+        spi.writebytes([0x12])
         temp = spi.readbytes(27)
     
         # a = [temp[3], temp[6], temp[9], temp[12], temp[15], temp[18], temp[21], temp[24] ]
@@ -176,27 +176,15 @@ def dataConvert(datapool,hex_data):
     datapool.dec_data.append(temp)
 
 def hex2dec(input_data):
+    input_data = int(input_data)
     if input_data>0x7FFFFF:
-        map_data = input_data - 0x1000000
+        output_data = ((~input_data & (0x007FFFFF))+1)
+        output_data = float(output_data * (-4.5) / 0x7FFFFF /24)
+        # map_data = input_data - 0x1000000
     else:
-        map_data = input_data
-    output_data = float(map_data * 4.5 / 0x7FFFFF /24)
+        # map_data = input_data
+        output_data = float(input_data * 4.5 / 0x7FFFFF /24)
     return output_data
-
-def checkData(datapool):
-    data = np.abs(datapool.dec_data).T
-    # print(data.shape)
-    for k in range(0,8):
-        mean = np.mean(data[k])
-        std = np.std(data[k])
-        for i in range(0,len(data[k])):
-            if(data[k][i]>mean+3*std):
-                # print(k,i)
-                # print(datapool.dec_data[i][k])
-                datapool.dec_data[i][k]=(datapool.dec_data[i-1][k]+datapool.dec_data[i+1][k])/2
-                # print(datapool.dec_data[i][k])
-        # print(mean)
-        # print(std)
 
 def process_receive(q):
     # time_s = 10
@@ -204,12 +192,12 @@ def process_receive(q):
     # i=0
     startConv()
     # while 1:
-    for i in range(0,100000):
+    for i in range(0,pkg_num):
         datapool = Datapool()
         datapool.pkgnum = i
         # i = i+1
-        print('receive')
-        receiveData(datapool,125) # 40ms one pkg
+        # print('receive')
+        receiveData(datapool,pkg_length) # 40ms one pkg
         # print(datapool.dec_data)
         q.put(datapool)
 
@@ -219,28 +207,32 @@ def process_receive(q):
         # client.send( senddata )
 
     stopConv()
-    # sio.savemat('data.mat', mdict={'ndata': newdatapool.dec_data, 'data': datapool.dec_data})
+
 
 def process_transfer(q):
     counter=0
     # time_s = 10
     print('start sending')
+    all_data= []
+    all_time_stamp = []
     while 1:
         if not q.empty():
             value = q.get(True)
             print(value.time_stamp)
             senddata = (json.dumps(value.__dict__)).encode('utf-8')
-            print(len(senddata))
+            # print(len(senddata))
             client.send( str(len(senddata)).encode('utf-8') )
             # print('1')
-
             client.send( senddata )
             print('sent')
 
+            all_data.extend(value.dec_data)
+            all_time_stamp.extend(value.time_stamp)
             counter = counter+1
-        if counter == 100000:
+        if counter == pkg_num:
             break
-
+    print('done!')
+    sio.savemat('4kheart.mat', mdict={'data': all_data, 'time_stamp': all_time_stamp})
 
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -248,6 +240,9 @@ client.connect( ('10.28.251.182', 8080) )
 # client.connect( ('127.0.0.1', 8080) )
 # client.connect( ('10.28.254.184', 8080) )
 print('connected!')
+sample_rate = 0x96
+pkg_length=125
+pkg_num=2*60
 
 if __name__ == '__main__':
     setup()
@@ -257,6 +252,7 @@ if __name__ == '__main__':
 
     p = multiprocessing.Pool()
     q = multiprocessing.Manager().Queue()
+
 
     # startConv()
     # # process_receive()
@@ -273,6 +269,6 @@ if __name__ == '__main__':
     p.join()
     GPIO.cleanup()
 
-    client.close()
+    # client.close()
     # p2.join()
 

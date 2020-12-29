@@ -7,6 +7,10 @@ import socket
 import json
 
 import multiprocessing
+import scipy.io as sio
+
+import numpy as np
+import copy
 
 PIN_DRDY = 6
 PIN_RST = 13
@@ -32,12 +36,12 @@ spi = spidev.SpiDev()
 def setup():
     # spi = spidev.SpiDev()
     spi.open(0,0)
-    spi.max_speed_hz = 7800000 # 15600000   
-    #spi.max_speed_hz = 3900000    
-    #spi.max_speed_hz = 1953000
+    # spi.max_speed_hz = 15600000   
+    # spi.max_speed_hz = 7800000
+    spi.max_speed_hz = 3900000
+    # spi.max_speed_hz = 1953000
     spi.mode = 0b01
     #spi.cshigh = False
-    spi.max_speed_hz = 3900000
 
     delay(50)
     GPIO.setmode(GPIO.BCM)
@@ -66,7 +70,7 @@ def setup():
     GPIO.output(PIN_RST, GPIO.LOW)
     delayMicroseconds(14)
     GPIO.output(PIN_RST, GPIO.HIGH)
-
+ 
     delayMicroseconds(12)
     spi.writebytes([0x11])
     delayMicroseconds(8)
@@ -74,7 +78,9 @@ def setup():
     delayMicroseconds(12)
 
 def initialize():
-    writeReg(0x01, 0x92)
+    #writeReg(0x01, 0x92)
+    writeReg(0x01, 0x95)
+    
     writeReg(0x02, 0xC0)
     writeReg(0x03, 0xE0)
     writeReg(0x04, 0x00)
@@ -134,70 +140,115 @@ def stopConv():
 
 def receiveData(datapool, datalength):
     datapool.time_stamp.append(str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')))
+    # counter=0
+ 
     for i in range(0,datalength):
         while 1:
             if GPIO.input(PIN_DRDY)==0:
                 break
         
         temp = spi.readbytes(27)
+    
+        # a = [temp[3], temp[6], temp[9], temp[12], temp[15], temp[18], temp[21], temp[24] ]
+        # if len( list( set( a )))!=1:
+        #     print('No.',i)
+        #     print('value is: ', temp)
+            # counter=counter+1
+        #     continue
+
         datapool.status.append( (temp[0]<<16) + (temp[1]<<8) + temp[2] )
         dataConvert(datapool, temp[3:27] )
+
+    # newdatapool.dec_data = copy.deepcopy(datapool.dec_data)
+    # checkData(datapool)
+    # print('Counter', counter)
+    
     # return datapool
+
 
 def dataConvert(datapool,hex_data):
     temp = []
+    data = []
     for j in range(0,8):
+        data.append(  (hex_data[3*j]<<16) + (hex_data[3*j+1]<<8) + hex_data[3*j+2] ) 
         temp.append( hex2dec( (hex_data[3*j]<<16) + (hex_data[3*j+1]<<8) + hex_data[3*j+2] ) )
+    print(data)
     datapool.dec_data.append(temp)
 
 def hex2dec(input_data):
-    # wierd -    
     if input_data>0x7FFFFF:
-        output_data = ((~input_data) +1)
-        # print(output_data)
-        output_data = float(output_data * (4.5) / 0x7FFFFF /24)
-        # print(output_data)
+        map_data = input_data - 0x1000000
     else:
-        output_data = float(input_data * 4.5 / 0x7FFFFF /24)
-    #output_data = float(output_data * 4.5 / 0x7FFFFF /24)
+        map_data = input_data
+    output_data = float(map_data * 4.5 / 0x7FFFFF /24)
     return output_data
+
+def checkData(datapool):
+    data = np.abs(datapool.dec_data).T
+    # print(data.shape)
+    for k in range(0,8):
+        mean = np.mean(data[k])
+        std = np.std(data[k])
+        for i in range(0,len(data[k])):
+            if(data[k][i]>mean+3*std):
+                # print(k,i)
+                # print(datapool.dec_data[i][k])
+                datapool.dec_data[i][k]=(datapool.dec_data[i-1][k]+datapool.dec_data[i+1][k])/2
+                # print(datapool.dec_data[i][k])
+        # print(mean)
+        # print(std)
 
 def process_receive(q):
     # time_s = 10
     # for i in range(0,25*time_s):
-    i=0
-    while 1:
+    # i=0
+    startConv()
+    # while 1:
+    for i in range(0,120):
         datapool = Datapool()
         datapool.pkgnum = i
-        i = i+1
-        receiveData(datapool,160) # 40ms one pkg
+        # i = i+1
+        print('receive')
+        receiveData(datapool,125) # 40ms one pkg
         # print(datapool.dec_data)
         q.put(datapool)
 
+        # senddata = (json.dumps(datapool.__dict__)).encode('utf-8')
+        # print(len(senddata))
+        # client.send( str(len(senddata)).encode('utf-8') )
+        # client.send( senddata )
+
+    stopConv()
+
 
 def process_transfer(q):
-    # counter=0
+    counter=0
     # time_s = 10
+    print('start sending')
+    all_data= []
     while 1:
         if not q.empty():
             value = q.get(True)
+            print(value.time_stamp)
             senddata = (json.dumps(value.__dict__)).encode('utf-8')
-            print(len(senddata))
+            # print(len(senddata))
             client.send( str(len(senddata)).encode('utf-8') )
             # print('1')
+
             client.send( senddata )
-            # print('1')
-
-            # counter = counter+1
-        # if counter == 25*time_s:
-        #     break
-
+            print('sent')
+            all_data.extend(value.dec_data)
+            counter = counter+1
+        if counter == 120:
+            break
+    print('done!')
+    sio.savemat('data2.mat', mdict={'data': all_data})
 
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect( ('10.28.251.182', 8080) )
 # client.connect( ('127.0.0.1', 8080) )
-client.connect( ('10.28.230.244', 8080) )
-# client.connect( ('10.28.152.158', 8080) )
+# client.connect( ('10.28.254.184', 8080) )
 print('connected!')
 
 if __name__ == '__main__':
@@ -209,25 +260,19 @@ if __name__ == '__main__':
     p = multiprocessing.Pool()
     q = multiprocessing.Manager().Queue()
 
-    startConv()
-   
+    # startConv()
+    # # process_receive()
     # p1 = multiprocessing.Process(target=process_receive, args=(q,) )
     # p2 = multiprocessing.Process(target=process_transfer, args=(q,) )
 
     p.apply_async(func=process_receive, args=(q,) )
     p.apply_async(func=process_transfer, args=(q,) )
-    # p.apply_async(func=process_transfer, args=(q,) )
 
-    # p.map_async(process_receive, q )
-    # p.map_async(process_transfer, q )
 
     p.close()
-    # p1.start()
-    # p2.start()
 
-    # p1.join()
+
     p.join()
-    stopConv()
     GPIO.cleanup()
 
     client.close()

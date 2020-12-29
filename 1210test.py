@@ -79,7 +79,7 @@ def setup():
 
 def initialize():
     #writeReg(0x01, 0x92)
-    writeReg(0x01, 0x92)
+    writeReg(0x01, 0x96)
     
     writeReg(0x02, 0xC0)
     writeReg(0x03, 0xE0)
@@ -180,10 +180,10 @@ def process_receive():
     datapool.pkgnum = 0
     startConv()
     for i in range(0,60):
-        receiveData(datapool,4000) # 40ms one pkg
+        receiveData(datapool,250) # 40ms one pkg
     stopConv()
     print('received')
-    sio.savemat('heart1208data.mat', mdict={'data1218': datapool.dec_data})
+    sio.savemat('data1.mat', mdict={'data': datapool.dec_data})
 
 if __name__ == '__main__':
     setup()

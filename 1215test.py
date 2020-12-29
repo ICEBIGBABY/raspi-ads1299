@@ -1,13 +1,16 @@
 import spidev
 import RPi.GPIO as GPIO
-import time
 from wiringpi import delay,delayMicroseconds
-import threading
-import scipy.io as sio
 import datetime
 
 import socket
 import json
+
+import multiprocessing
+import scipy.io as sio
+
+import numpy as np
+import copy
 
 PIN_DRDY = 6
 PIN_RST = 13
@@ -15,38 +18,31 @@ PIN_CLKSEL = 19
 PIN_START = 26
 PIN_CS = 8
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# client.connect( ('127.0.0.1', 8080) )
-client.connect( ('10.28.230.244', 8080) )
-
-print('connected!')
 
 class Datapool:
-    def __init__(self, name):
-        self.name = name
-        self.hex_data = []
+    def __init__(self):
+        self.pkgnum = 0
         self.dec_data = []
+        self.ndec_data = []
         self.time_stamp = []
         self.status = []
     def clear(self):
-        self.hex_data = []
         self.dec_data = []
         self.time_stamp = []
         self.status = []
 
 
-datapool1 = Datapool('pool1')
 spi = spidev.SpiDev()
 
 def setup():
     # spi = spidev.SpiDev()
     spi.open(0,0)
-    spi.max_speed_hz = 7800000 # 15600000   
-    #spi.max_speed_hz = 3900000    
-    #spi.max_speed_hz = 1953000
+    # spi.max_speed_hz = 15600000
+    # spi.max_speed_hz = 7800000
+    spi.max_speed_hz = 3900000
+    # spi.max_speed_hz = 1953000
     spi.mode = 0b01
     #spi.cshigh = False
-    spi.max_speed_hz = 3900000
 
     delay(50)
     GPIO.setmode(GPIO.BCM)
@@ -83,7 +79,9 @@ def setup():
     delayMicroseconds(12)
 
 def initialize():
-    writeReg(0x01, 0x92)
+    #writeReg(0x01, 0x92)
+    writeReg(0x01, 0x94)
+    
     writeReg(0x02, 0xC0)
     writeReg(0x03, 0xE0)
     writeReg(0x04, 0x00)
@@ -123,6 +121,18 @@ def readAllReg():
         readReg(address)
         address += 1
 
+def changeToTestSignal():
+    writeReg(0x02, 0xD0)
+
+    writeReg(0x05, 0x65)
+    writeReg(0x06, 0x65)
+    writeReg(0x07, 0x65)
+    writeReg(0x08, 0x65)
+    writeReg(0x09, 0x65)
+    writeReg(0x0A, 0x65)
+    writeReg(0x0B, 0x65)
+    writeReg(0x0C, 0x65)
+
 def startConv():
     spi.writebytes([0x08, 0x10])
 
@@ -131,47 +141,81 @@ def stopConv():
 
 def receiveData(datapool, datalength):
     datapool.time_stamp.append(str(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')))
+    # counter=0
+    
     for i in range(0,datalength):
         while 1:
             if GPIO.input(PIN_DRDY)==0:
                 break
         
         temp = spi.readbytes(27)
+
         datapool.status.append( (temp[0]<<16) + (temp[1]<<8) + temp[2] )
         dataConvert(datapool, temp[3:27] )
-    client.send( (json.dumps(datapool.__dict__)).encode('utf-8') )
-    datapool.clear()
 
 
 def dataConvert(datapool,hex_data):
     temp = []
+    # data=[]
     for j in range(0,8):
+        # data.append(  (hex_data[3*j]<<16) + (hex_data[3*j+1]<<8) + hex_data[3*j+2] ) 
         temp.append( hex2dec( (hex_data[3*j]<<16) + (hex_data[3*j+1]<<8) + hex_data[3*j+2] ) )
+    print(temp)
     datapool.dec_data.append(temp)
 
 def hex2dec(input_data):
-    # wierd -    
     if input_data>0x7FFFFF:
-        output_data = ((~input_data) +1)
-        #print(output_data)
-        output_data = float(output_data * (4.5) / 0x7FFFFF /24)
-        #print(output_data)
+        map_data = input_data - 0x1000000
     else:
-        output_data = float(input_data * 4.5 / 0x7FFFFF /24)
-    #output_data = float(output_data * 4.5 / 0x7FFFFF /24)
+        map_data = input_data
+    output_data = float(map_data * 4.5 / 0x7FFFFF /24)
     return output_data
 
+def checkData(datapool):
+    datapool.ndec_data = copy.deepcopy(datapool.dec_data)
+    data = np.abs(datapool.dec_data).T
+    # print(data.shape)
+    for k in range(0,8):
+        # mean = np.mean(data[k])
+        # std = np.std(data[k])
+        for i in range(20,len(data[k])):
+            # if(data[k][i]>mean+3*std):
+            # if(abs(data[k][i]-datapool.ndec_data[i-1][k])>10*abs(datapool.ndec_data[i-1][k]-datapool.ndec_data[i-2][k])):
+            if(abs(data[k][i-1]-datapool.ndec_data[i-2][k])>5*abs(datapool.ndec_data[i-2][k]-datapool.ndec_data[i-3][k])):
+                # print(k,i)
+                # print(datapool.dec_data[i][k])
+                # datapool.ndec_data[i][k]=(datapool.dec_data[i-1][k]+datapool.dec_data[i+1][k])/2
+                datapool.ndec_data[i-1][k]=datapool.ndec_data[i-2][k]+datapool.ndec_data[i][k]
+
+                # print(datapool.dec_data[i][k])
+        # print(mean)
+        # print(std)
+
+
+def process_receive():
+    # time_s = 10
+    # for i in range(0,25*time_s):
+    datapool = Datapool()
+    datapool.pkgnum = 0
+    startConv()
+    for i in range(0,60):
+        receiveData(datapool,1000) # 40ms one pkg
+    stopConv()
+    # checkData(datapool)
+    print('received')
+    # sio.savemat('4kdata.mat', mdict={'data': datapool.dec_data, 'ndata': datapool.ndec_data})
+    sio.savemat('4kdata.mat', mdict={'data': datapool.dec_data})
 
 if __name__ == '__main__':
     setup()
     initialize()
     readAllReg()
+    # changeToTestSignal()
 
-    time_s = 10
-    startConv()
-    for k in range(0,25*time_s):
-        receiveData(datapool1, 160)
-    stopConv()
+    process_receive()
 
+    print('saved')
     GPIO.cleanup()
-    client.close()
+
+
+

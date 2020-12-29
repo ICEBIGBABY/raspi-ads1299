@@ -252,26 +252,26 @@ def twochiprecrivedata(chip1, chip2, datalength, pkglength, q):
     chip2.stopConv()
 
 
-pkgnum = 120
-pkglength = 125
+pkgnum = 1000
+pkglength = 50
 
 chip1 = Ads1299(19, 0)
 chip1.global_setup()
 chip1.initialize()
-chip1.changeToTestSignal()
+# chip1.changeToTestSignal()
 print('chip1')
 chip1.readAllReg()
 
 chip2 = Ads1299(16, 0)
 chip2.initialize()
-chip2.changeToTestSignal()
+# chip2.changeToTestSignal()
 print('chip2')
 chip2.readAllReg()
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # client.connect( ('127.0.0.1', 8080) )
 # client.connect( ('10.128.247.175', 8080) )
-client.connect( ('10.28.230.244', 8080) )
+client.connect( ('10.28.173.43', 8080) )
 print('connected!')
 
 p = multiprocessing.Pool()
@@ -280,8 +280,7 @@ q = multiprocessing.Manager().Queue()
 p.apply_async(func=process_transfer, args=(pkgnum, q,) )
 # chip1.receiveData(pkglength, datalength=pkgnum*pkglength, q=q)
 
-pkgnum = 240
-pkglength = 60
+
 twochiprecrivedata(chip1, chip2, pkgnum*pkglength, pkglength, q)
 
 p.close()

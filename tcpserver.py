@@ -16,21 +16,22 @@ all_data = []
 while 1:
 # for k in range(0,200):
     length = conn.recv(5)
-    # print(length)
+    # length = conn.recv(20000)
+    print(length)
     # print(int(length))
 
     if length==b'':
-        print(len(all_data))
-        sio.savemat('testdata.mat', mdict={'data': all_data})
+        # print(len(all_data))
+        # sio.savemat('testdata.mat', mdict={'data': all_data})
         break
 
     data = conn.recv(int(length))
 
     # data = conn.recv(20000)
     # print(data)
-    data = json.loads(data)
+    # data = json.loads(data)
 
-    all_data.extend(data['dec_data'])
+    # all_data.extend(data['dec_data'])
 
     # print(json.loads(data))
 
